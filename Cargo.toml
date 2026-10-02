@@ -1,0 +1,55 @@
+[package]
+name = "owdio_mio"
+version = "0.3.0"
+edition = "2024"
+license = "MIT"
+description = "Offline Audio Transcriber (subtitle creation, transcription, summary and content description)"
+
+[package.metadata.generate-rpm]
+assets = [
+    # 1. The binary executable
+    { source = "target/release/owdio_mio", dest = "/usr/bin/owdio_mio", mode = "755" },
+
+    # 2. Desktop launcher entry
+    { source = "assets/owdio_mio.desktop", dest = "/usr/share/applications/owdio_mio.desktop", mode = "644" },
+
+    # 3. Application icon (installed to pixmaps for universal resolution support)
+    { source = "assets/logo.png", dest = "/usr/share/pixmaps/owdio_mio.png", mode = "644" },
+    
+    # 4. Also install to hicolor icons (standard theme path)
+    { source = "assets/logo.png", dest = "/usr/share/icons/hicolor/256x256/apps/owdio_mio.png", mode = "644" },
+]
+
+[package.metadata.generate-rpm.requires]
+ffmpeg = "*"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false
+incremental = false
+
+# Compile dependencies with optimizations and no debug symbols
+[profile.dev]
+incremental = false
+debug = false
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+
+[dependencies]
+anyhow = "1.0.104"
+chrono = "0.4.45"
+dirs = "7.0.0"
+eframe = "0.36.2"
+egui_extras = { version = "*", features = ["all_loaders"] }
+reqwest = { version = "0.13.5", features = ["json", "multipart", "blocking"] }
+rfd = "0.17.2"
+serde = "1.0.229"
+tempfile = "3.27.0"
+toml = "1.1.6"
+

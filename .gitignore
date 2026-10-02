@@ -1,0 +1,29 @@
+/target
+/vendor
+
+# Scratch files
+structure.txt
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Generated test transcripts & media (prevents committing test runs)
+*.wav
+*.mp3
+*.srt
+*.transcript.txt
+*.summary.txt
+*.youtube.txt
+*.patreon.txt

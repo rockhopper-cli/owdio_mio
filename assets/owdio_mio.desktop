@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Owdio Mio
+Comment=Offline Audio Transcriber and Summarizer
+Exec=owdio_mio
+Icon=owdio_mio
+Terminal=false
+Categories=AudioVideo;Audio;Utility;
+Keywords=audio;transcribe;whisper;subtitles;transcription;
+StartupNotify=true
