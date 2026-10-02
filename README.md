@@ -2,8 +2,6 @@
 
   <img src="assets/logo.png" alt="OwdioMio Logo" width="140" />
 
-  # Owdio Mio
-
   **Privacy-First, 100% Offline Audio Transcriber, Subtitle Generator & Content Creator**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
