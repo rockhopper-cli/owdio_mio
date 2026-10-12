@@ -1,6 +1,7 @@
 // src/podman/mod.rs
 pub mod client;
 pub mod llm_client;
+pub mod manager;
 
 use reqwest::blocking::Client;
 use std::time::Duration;
