@@ -1,23 +1,23 @@
 // src/subtitle_pipeline.rs
 use anyhow::Result;
-use std::path::Path;
-use std::sync::mpsc::Sender;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use anyhow::anyhow;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Sender;
 
 use crate::audio::transcriber;
+use crate::audio_pipeline::PipelineMessage;
 use crate::subtitles::formatter;
-use crate::audio_pipeline::PipelineMessage; 
-
 
 pub fn generate_subtitles<P: AsRef<Path>>(
     wav_path: P,
     whisper_endpoint: &str,
+    chunk_duration_secs: u32, // <-- Added chunk size argument
     max_chars_per_line: usize,
     two_lines: bool,
     min_gap_ms: u64,
-    cancel_token: Arc<AtomicBool>, // <-- Add this
+    cancel_token: Arc<AtomicBool>,
     tx: Sender<PipelineMessage<String>>,
 ) -> Result<String> {
     let wav_path = wav_path.as_ref();
@@ -27,11 +27,15 @@ pub fn generate_subtitles<P: AsRef<Path>>(
     let segments = transcriber::transcribe_audio(
         wav_path,
         whisper_endpoint,
+        chunk_duration_secs,
         max_chars_per_line,
         cancel_token.clone(),
         move |progress, text| {
             tx_clone
-                .send(PipelineMessage::Progress { progress, text: text.clone() })
+                .send(PipelineMessage::Progress {
+                    progress,
+                    text: text.clone(),
+                })
                 .map_err(|_| anyhow!("UI receiver disconnected"))?;
             let _ = tx_clone.send(PipelineMessage::Log(text));
             Ok(())
@@ -47,7 +51,9 @@ pub fn generate_subtitles<P: AsRef<Path>>(
         progress: 0.90,
         text: "Formatting subtitles & adjusting gaps...".into(),
     });
-    let _ = tx.send(PipelineMessage::Log("Formatting subtitles & adjusting gaps...".into()));
+    let _ = tx.send(PipelineMessage::Log(
+        "Formatting subtitles & adjusting gaps...".into(),
+    ));
 
     let subtitles = formatter::format(&segments, max_chars_per_line, two_lines, min_gap_ms)?;
     let srt = formatter::to_srt(&subtitles);
