@@ -1,10 +1,10 @@
 // src/ui/subtitle_creator.rs
 use crate::audio_pipeline::PipelineMessage;
+use crate::config_struct::AppConfig;
 use crate::ui::components;
-use crate::ui::config::AppConfig;
 use eframe::egui;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 
@@ -13,6 +13,7 @@ pub struct SubtitleState {
     pub max_chars_per_line: usize,
     pub two_lines_subtitles: bool,
     pub min_gap_ms: u64,
+    pub chunk_duration_secs: u32, // Stored directly as 0 to 300 seconds
 
     // UI Async Tracking
     pub is_processing: bool,
@@ -29,6 +30,7 @@ impl Default for SubtitleState {
             max_chars_per_line: 42,
             two_lines_subtitles: true,
             min_gap_ms: 100,
+            chunk_duration_secs: 60,
             is_processing: false,
             progress: 0.0,
             progress_text: String::from("Idle"),
@@ -43,6 +45,7 @@ impl SubtitleState {
         Self {
             max_chars_per_line: config.max_chars_per_line,
             min_gap_ms: config.subtitle_gap_ms as u64,
+            chunk_duration_secs: config.whisper_chunk_duration_secs,
             ..Default::default()
         }
     }
@@ -117,7 +120,25 @@ pub fn show(
     ui.separator();
     ui.add_space(8.0);
 
-    // 2. Formatting Options
+    // 2. Chunking & Formatting Controls
+    ui.horizontal(|ui| {
+        ui.label("Audio chunk size (0 - 300 secs):  ");
+        ui.add_enabled(
+            !state.is_processing,
+            egui::DragValue::new(&mut state.chunk_duration_secs)
+                .range(0..=300)
+                .suffix(" secs"),
+        );
+
+        ui.label(
+            egui::RichText::new("(0 = process entire file, up to 300s / 5 min)")
+                .weak()
+                .italics()
+                .size(11.0),
+        );
+    });
+    ui.add_space(8.0);
+
     ui.horizontal(|ui| {
         ui.label("Max characters per line (max 80):");
         ui.add_enabled(
@@ -160,60 +181,71 @@ pub fn show(
     if !state.is_processing && ui.button("↺ Reset to Config Defaults").clicked() {
         state.max_chars_per_line = config.max_chars_per_line;
         state.min_gap_ms = config.subtitle_gap_ms as u64;
+        state.chunk_duration_secs = config.whisper_chunk_duration_secs;
     }
 
     ui.add_space(8.0);
     ui.separator();
     ui.add_space(8.0);
 
-    // 3. Action Button
-
+    // 3. Action Buttons (Generate + Cancel)
     let can_start = !state.is_processing && state.wav_file_path.is_some();
-    let generate_btn = ui.add_enabled(
-        can_start,
-        egui::Button::new(if state.is_processing {
-            "Processing..."
-        } else {
-            "Generate Subtitles"
-        }),
-    );
+    ui.horizontal(|ui| {
+        let generate_btn = ui.add_enabled(
+            can_start,
+            egui::Button::new(if state.is_processing {
+                "Processing..."
+            } else {
+                "Generate Subtitles"
+            }),
+        );
 
-    if generate_btn.clicked() {
-        if let Some(wav_path) = state.wav_file_path.clone() {
-            state.is_processing = true;
-            state.progress = 0.05;
-            state.progress_text = "Starting...".to_string();
-            let _ = log_tx.send(format!(
-                "--- Starting Subtitle Generation for: {} ---",
-                wav_path
-            ));
+        if generate_btn.clicked() {
+            if let Some(wav_path) = state.wav_file_path.clone() {
+                state.is_processing = true;
+                state.progress = 0.05;
+                state.progress_text = "Starting...".to_string();
+                state.cancel_token = Arc::new(AtomicBool::new(false)); // Reset token
+                let _ = log_tx.send(format!(
+                    "--- Starting Subtitle Generation for: {} ---",
+                    wav_path
+                ));
 
-            let (tx, rx): (
-                Sender<PipelineMessage<String>>,
-                Receiver<PipelineMessage<String>>,
-            ) = channel();
-            state.receiver = Some(rx);
+                let (tx, rx): (
+                    Sender<PipelineMessage<String>>,
+                    Receiver<PipelineMessage<String>>,
+                ) = channel();
+                state.receiver = Some(rx);
 
-            let max_chars = state.max_chars_per_line;
-            let two_lines = state.two_lines_subtitles;
-            let min_gap_ms = state.min_gap_ms;
-            let inference_url = format!("http://127.0.0.1:{}/inference", config.whisper_port);
-            let cancel_token = state.cancel_token.clone();
+                // Pass value directly as seconds
+                let chunk_duration = state.chunk_duration_secs;
+                let max_chars = state.max_chars_per_line;
+                let two_lines = state.two_lines_subtitles;
+                let min_gap_ms = state.min_gap_ms;
+                let inference_url = format!("http://127.0.0.1:{}/inference", config.whisper_port);
+                let cancel_token = state.cancel_token.clone();
 
-            thread::spawn(move || {
-                let result = run_pipeline_task(
-                    wav_path,
-                    inference_url,
-                    max_chars,
-                    two_lines,
-                    min_gap_ms,
-                    cancel_token, // <-- Pass here
-                    tx.clone(),
-                );
-                let _ = tx.send(PipelineMessage::Finished(result));
-            });
+                thread::spawn(move || {
+                    let result = run_pipeline_task(
+                        wav_path,
+                        inference_url,
+                        chunk_duration,
+                        max_chars,
+                        two_lines,
+                        min_gap_ms,
+                        cancel_token,
+                        tx.clone(),
+                    );
+                    let _ = tx.send(PipelineMessage::Finished(result));
+                });
+            }
         }
-    }
+
+        if state.is_processing && ui.button("⏹ Cancel").clicked() {
+            state.cancel_token.store(true, Ordering::Relaxed);
+            state.progress_text = "Cancelling...".to_string();
+        }
+    });
 
     ui.add_space(10.0);
 
@@ -229,15 +261,17 @@ pub fn show(
 fn run_pipeline_task(
     wav_path: String,
     inference_url: String,
+    chunk_duration_secs: u32,
     max_chars: usize,
     two_lines: bool,
     min_gap_ms: u64,
-    cancel_token: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    cancel_token: Arc<AtomicBool>,
     tx: Sender<PipelineMessage<String>>,
 ) -> Result<String, String> {
     let srt = crate::subtitle_pipeline::generate_subtitles(
         &wav_path,
         &inference_url,
+        chunk_duration_secs,
         max_chars,
         two_lines,
         min_gap_ms,

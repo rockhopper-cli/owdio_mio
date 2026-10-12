@@ -1,15 +1,14 @@
 // src/audio_pipeline.rs
 use crate::audio::transcriber;
 use crate::podman::llm_client::LlmClient;
-use crate::utils::format_transcript_timestamp;  
-use anyhow::Result;
+use crate::utils::format_transcript_timestamp;
+use anyhow::{Result, anyhow};
+use std::fmt::Write;
 use std::fs;
 use std::path::Path;
-use std::sync::mpsc::Sender;
-use std::fmt::Write;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use anyhow::anyhow;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Sender;
 
 #[derive(Clone, Debug)]
 pub struct PipelineResult {
@@ -41,8 +40,9 @@ pub fn run_audio_pipeline(
     wav_path: String,
     whisper_port: u16,
     qwen_port: u16,
+    chunk_duration_secs: u32, // <-- Added chunk size parameter
     options: LlmGenerationOptions,
-    cancel_token: Arc<AtomicBool>, // <-- Add this
+    cancel_token: Arc<AtomicBool>,
     tx: Sender<PipelineMessage<PipelineResult>>,
 ) -> Result<PipelineResult, String> {
     let input_path = Path::new(&wav_path);
@@ -53,11 +53,15 @@ pub fn run_audio_pipeline(
     let segments = transcriber::transcribe_audio(
         input_path,
         &whisper_url,
+        chunk_duration_secs,
         0,
         cancel_token.clone(),
         move |progress, text| {
             tx_clone
-                .send(PipelineMessage::Progress { progress, text: text.clone() })
+                .send(PipelineMessage::Progress {
+                    progress,
+                    text: text.clone(),
+                })
                 .map_err(|_| anyhow!("UI receiver disconnected"))?;
             let _ = tx_clone.send(PipelineMessage::Log(text));
             Ok(())
@@ -69,7 +73,7 @@ pub fn run_audio_pipeline(
         return Err("Task cancelled by user".to_string());
     }
 
-    // 2. Format segments into timestamped text (Pre-allocated without per-line String allocations)
+    // 2. Format segments into timestamped text
     let mut full_transcript = String::with_capacity(segments.len() * 80);
     for seg in &segments {
         let _ = writeln!(
@@ -89,7 +93,7 @@ pub fn run_audio_pipeline(
         transcript_path.display()
     )));
 
-    // 3. Optional LLM stage with Qwen 2.5 Coder (0.85 -> 1.0)
+    // 3. Optional LLM stage with Qwen 2.5 Coder
     let llm = LlmClient::new(qwen_port);
 
     let mut summary_path_out = None;
@@ -99,7 +103,6 @@ pub fn run_audio_pipeline(
     let mut patreon_path_out = None;
     let mut patreon_text_out = None;
 
-    // 3A. Executive Summary
     if options.summary && !cancel_token.load(Ordering::Relaxed) {
         let _ = tx.send(PipelineMessage::Progress {
             progress: 0.88,
@@ -114,17 +117,22 @@ pub fn run_audio_pipeline(
             Ok(summary) => {
                 let p = input_path.with_extension("summary.txt");
                 let _ = fs::write(&p, &summary);
-                let _ = tx.send(PipelineMessage::Log(format!("Saved summary to: {}", p.display())));
+                let _ = tx.send(PipelineMessage::Log(format!(
+                    "Saved summary to: {}",
+                    p.display()
+                )));
                 summary_path_out = Some(p.display().to_string());
                 summary_text_out = Some(summary);
             }
             Err(e) => {
-                let _ = tx.send(PipelineMessage::Log(format!("Warning: Summary generation failed: {:#}", e)));
+                let _ = tx.send(PipelineMessage::Log(format!(
+                    "Warning: Summary generation failed: {:#}",
+                    e
+                )));
             }
         }
     }
 
-    // 3B. YouTube Description with Timestamps / Chapters
     if options.youtube && !cancel_token.load(Ordering::Relaxed) {
         let _ = tx.send(PipelineMessage::Progress {
             progress: 0.92,
@@ -147,17 +155,22 @@ pub fn run_audio_pipeline(
             Ok(yt) => {
                 let p = input_path.with_extension("youtube.txt");
                 let _ = fs::write(&p, &yt);
-                let _ = tx.send(PipelineMessage::Log(format!("Saved YouTube description to: {}", p.display())));
+                let _ = tx.send(PipelineMessage::Log(format!(
+                    "Saved YouTube description to: {}",
+                    p.display()
+                )));
                 youtube_path_out = Some(p.display().to_string());
                 youtube_text_out = Some(yt);
             }
             Err(e) => {
-                let _ = tx.send(PipelineMessage::Log(format!("Warning: YouTube generation failed: {:#}", e)));
+                let _ = tx.send(PipelineMessage::Log(format!(
+                    "Warning: YouTube generation failed: {:#}",
+                    e
+                )));
             }
         }
     }
 
-    // 3C. Patreon Community Post
     if options.patreon && !cancel_token.load(Ordering::Relaxed) {
         let _ = tx.send(PipelineMessage::Progress {
             progress: 0.96,
@@ -175,12 +188,18 @@ pub fn run_audio_pipeline(
             Ok(patreon) => {
                 let p = input_path.with_extension("patreon.txt");
                 let _ = fs::write(&p, &patreon);
-                let _ = tx.send(PipelineMessage::Log(format!("Saved Patreon post to: {}", p.display())));
+                let _ = tx.send(PipelineMessage::Log(format!(
+                    "Saved Patreon post to: {}",
+                    p.display()
+                )));
                 patreon_path_out = Some(p.display().to_string());
                 patreon_text_out = Some(patreon);
             }
             Err(e) => {
-                let _ = tx.send(PipelineMessage::Log(format!("Warning: Patreon post generation failed: {:#}", e)));
+                let _ = tx.send(PipelineMessage::Log(format!(
+                    "Warning: Patreon post generation failed: {:#}",
+                    e
+                )));
             }
         }
     }

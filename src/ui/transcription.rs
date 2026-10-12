@@ -1,7 +1,7 @@
 // src/ui/transcription.rs
 use crate::audio_pipeline::{self,LlmGenerationOptions, PipelineMessage, PipelineResult};
 use crate::ui::components;
-use crate::ui::config::AppConfig;
+use crate::config_struct::AppConfig;
 
 use eframe::egui;
 use std::sync::Arc;
@@ -146,6 +146,7 @@ pub fn show(
 
                     let whisper_port = config.whisper_port;
                     let qwen_port = config.qwen_port;
+                    let chunk_duration_secs = config.whisper_chunk_duration_secs;
                     let options = LlmGenerationOptions {
                         summary: state.generate_summary,
                         youtube: false,
@@ -158,6 +159,7 @@ pub fn show(
                             wav_path,
                             whisper_port,
                             qwen_port,
+                            chunk_duration_secs,
                             options,
                             cancel_token,
                             tx.clone(),
