@@ -1,23 +1,22 @@
 // src/audio/transcriber.rs
 use crate::audio::ffmpeg;
 use crate::podman::client::{WhisperClient, WhisperSegment};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-
-const CHUNK_DURATION_SECS: u32 = 60;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub fn transcribe_audio<P, F>(
     wav_path: P,
     whisper_endpoint: &str,
+    chunk_duration_secs: u32, // <-- Configurable chunk size
     max_len: usize,
-    cancel_token: Arc<AtomicBool>, // <-- Add cancellation token
+    cancel_token: Arc<AtomicBool>,
     mut on_progress: F,
 ) -> Result<Vec<WhisperSegment>>
 where
     P: AsRef<Path>,
-    F: FnMut(f32, String) -> Result<()>, // <-- Returns Result to detect channel disconnect
+    F: FnMut(f32, String) -> Result<()>,
 {
     let wav_path = wav_path.as_ref();
 
@@ -25,21 +24,37 @@ where
         return Err(anyhow!("Task cancelled before start"));
     }
 
-    on_progress(0.05, "Splitting and converting audio with FFmpeg...".into())?;
-    let processed = ffmpeg::split_and_convert_audio(wav_path, CHUNK_DURATION_SECS)
+    if chunk_duration_secs == 0 {
+        on_progress(
+            0.05,
+            "Converting audio with FFmpeg (single file, no segmentation)...".into(),
+        )?;
+    } else {
+        on_progress(
+            0.05,
+            format!(
+                "Splitting and converting audio with FFmpeg ({}s chunks)...",
+                chunk_duration_secs
+            ),
+        )?;
+    }
+
+    let processed = ffmpeg::split_and_convert_audio(wav_path, chunk_duration_secs)
         .context("Audio conversion failed")?;
 
     let total_chunks = processed.chunks.len();
     on_progress(
         0.10,
-        format!("Split audio into {} chunk(s). Connecting to Whisper...", total_chunks),
+        format!(
+            "Split audio into {} chunk(s). Connecting to Whisper...",
+            total_chunks
+        ),
     )?;
 
     let whisper = WhisperClient::new(whisper_endpoint);
     let mut all_segments = Vec::new();
 
     for (i, chunk) in processed.chunks.iter().enumerate() {
-        // Check for cancellation between chunks
         if cancel_token.load(Ordering::Relaxed) {
             return Err(anyhow!("Task cancelled by user"));
         }
@@ -49,7 +64,10 @@ where
 
         on_progress(
             progress,
-            format!("Transcribing chunk {}/{} (offset {:.1}s)...", chunk_num, total_chunks, chunk.start_offset_secs),
+            format!(
+                "Transcribing chunk {}/{} (offset {:.1}s)...",
+                chunk_num, total_chunks, chunk.start_offset_secs
+            ),
         )?;
 
         let mut segments = whisper

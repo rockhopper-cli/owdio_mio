@@ -1,13 +1,12 @@
 // src/audio/ffmpeg.rs
-
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 
 pub struct AudioChunk {
     pub path: PathBuf,
-    /// Offset in seconds from the beginning of the original file (e.g., chunk 1 starts at 120.0s)
+    /// Offset in seconds from the beginning of the original file
     pub start_offset_secs: f64,
 }
 
@@ -17,7 +16,8 @@ pub struct ProcessedAudio {
     pub chunks: Vec<AudioChunk>,
 }
 
-/// Converts a WAV file to 16kHz mono pcm_s16le and splits it into 120-second chunks.
+/// Converts a WAV file to 16kHz mono pcm_s16le and splits it into chunks.
+/// If chunk_duration_secs is 0, the audio is not split and processed as a single chunk.
 pub fn split_and_convert_audio<P: AsRef<Path>>(
     input: P,
     chunk_duration_secs: u32,
@@ -25,38 +25,81 @@ pub fn split_and_convert_audio<P: AsRef<Path>>(
     let input = input.as_ref();
 
     if !input.exists() {
-        return Err(anyhow!("Input audio file does not exist: {}", input.display()));
+        return Err(anyhow!(
+            "Input audio file does not exist: {}",
+            input.display()
+        ));
     }
 
-    // Temporary directory where 2-minute chunks will live
     let temp_dir = tempfile::Builder::new()
         .prefix("whisper_chunks_")
         .tempdir()
         .context("Failed to create temporary directory for chunks")?;
 
+    // If chunk size is 0, convert entire file without segment muxing
+    if chunk_duration_secs == 0 {
+        let single_output = temp_dir.path().join("chunk_0000.wav");
+        let output = Command::new("ffmpeg")
+            .arg("-nostdin")
+            .arg("-loglevel")
+            .arg("error")
+            .arg("-y")
+            .arg("-threads")
+            .arg("0")
+            .arg("-i")
+            .arg(input)
+            .arg("-vn")
+            .arg("-ar")
+            .arg("16000")
+            .arg("-ac")
+            .arg("1")
+            .arg("-c:a")
+            .arg("pcm_s16le")
+            .arg(&single_output)
+            .output()
+            .context("Failed to execute ffmpeg. Ensure ffmpeg is installed and on your PATH.")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!(
+                "FFmpeg failed with exit code {:?}:\n{}",
+                output.status.code(),
+                stderr
+            ));
+        }
+
+        return Ok(ProcessedAudio {
+            _temp_dir: temp_dir,
+            chunks: vec![AudioChunk {
+                path: single_output,
+                start_offset_secs: 0.0,
+            }],
+        });
+    }
+
     let output_pattern = temp_dir.path().join("chunk_%04d.wav");
 
     // FFmpeg command to resample and segment
     let output = Command::new("ffmpeg")
-        .arg("-nostdin") // Disables standard input interaction
+        .arg("-nostdin")
         .arg("-loglevel")
-        .arg("error") // Suppresses frame-by-frame stderr progress text
-        .arg("-y") // Overwrite output files if needed
+        .arg("error")
+        .arg("-y")
         .arg("-threads")
-        .arg("0") // Use all available CPU cores for decoding/resampling
+        .arg("0")
         .arg("-i")
         .arg(input)
-        .arg("-vn") // Disables video stream processing
+        .arg("-vn")
         .arg("-ar")
-        .arg("16000") // 16 kHz sample rate
+        .arg("16000")
         .arg("-ac")
-        .arg("1") // Mono
+        .arg("1")
         .arg("-c:a")
-        .arg("pcm_s16le") // 16-bit PCM
+        .arg("pcm_s16le")
         .arg("-f")
-        .arg("segment") // Segment muxer
+        .arg("segment")
         .arg("-segment_time")
-        .arg(chunk_duration_secs.to_string()) // 60 seconds
+        .arg(chunk_duration_secs.to_string())
         .arg("-reset_timestamps")
         .arg("1")
         .arg(output_pattern)
@@ -72,7 +115,6 @@ pub fn split_and_convert_audio<P: AsRef<Path>>(
         ));
     }
 
-    // Collect all generated chunks in sorted order
     let mut chunk_paths: Vec<PathBuf> = std::fs::read_dir(temp_dir.path())
         .context("Failed to read chunk temp directory")?
         .filter_map(|entry| entry.ok().map(|e| e.path()))
