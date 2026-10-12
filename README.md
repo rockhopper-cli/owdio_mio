@@ -156,15 +156,18 @@ owdio_mio/
 │   │   ├── mod.rs
 │   │   └── transcriber.rs                    # Multi-chunk transcription dispatcher
 │   ├── audio_pipeline.rs                     # End-to-end transcription & summary pipeline
+│   ├── config_struct.rs                      # Configuration data models & state persistence
 │   ├── podman/
 │   │   ├── client.rs                         # Whisper HTTP client & verbose_json parser
 │   │   ├── llm_client.rs                     # Qwen/llama.cpp OpenAI-compatible chat client
+│   │   ├── manager.rs                        # Container lifecycle & process manager (start/stop/status)
 │   │   └── mod.rs                            # Shared HTTP client setup & timeouts
 │   ├── subtitle_pipeline.rs                  # Standalone subtitle generation pipeline
 │   ├── subtitles/
 │   │   ├── formatter.rs                      # Word-wrapping, gap enforcement & SRT serializer
 │   │   └── mod.rs
 │   ├── ui/
+│   │   ├── about.rs                          # About view, version information & credits
 │   │   ├── components.rs                     # Reusable UI widgets (file picker, progress bar)
 │   │   ├── config.rs                         # Settings panel, container controls & health checks
 │   │   ├── content_creator.rs                # YouTube description & Patreon post generator
@@ -175,7 +178,7 @@ owdio_mio/
 │   └── utils.rs                              # Timestamp & log formatting helpers
 ├── Cargo.lock
 ├── Cargo.toml
-└── LICENSE
+└── README.md                                 # Project overview, requirements & setup guide
 ```
 
 ---
