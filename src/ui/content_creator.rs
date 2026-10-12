@@ -1,7 +1,7 @@
 // src/ui/content_creator.rs
 use crate::audio_pipeline::PipelineMessage;
 use crate::podman::llm_client::LlmClient;
-use crate::ui::config::AppConfig;
+use crate::config_struct::AppConfig;
 use eframe::egui;
 use std::fmt::Write;
 use std::fs;
