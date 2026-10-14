@@ -132,8 +132,7 @@ pub fn show(
                     }),
                 )
                 .clicked()
-            {
-                if let Some(wav_path) = state.wav_file_path.clone() {
+                && let Some(wav_path) = state.wav_file_path.clone() {
                     state.is_processing = true;
                     state.progress = 0.05;
                     state.progress_text = "Starting...".into();
@@ -167,7 +166,6 @@ pub fn show(
                         let _ = tx.send(PipelineMessage::Finished(res));
                     });
                 }
-            }
             ui.add_space(10.0);
 
             // 4. Progress Bar

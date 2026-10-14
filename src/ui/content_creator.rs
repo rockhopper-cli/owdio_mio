@@ -209,7 +209,7 @@ pub fn show(
                         match fs::read_to_string(&path) {
                             Ok(raw) => {
                                 // Case-insensitive extension check
-                                let is_subtitle = path.extension().map_or(false, |ext| {
+                                let is_subtitle = path.extension().is_some_and(|ext| {
                                     ext.eq_ignore_ascii_case("srt") || ext.eq_ignore_ascii_case("vtt")
                                 });
 
@@ -332,8 +332,8 @@ pub fn show(
             ui.add_space(15.0);
 
             // 4. Results Display
-            if let Some(ref res) = state.result {
-                if res.youtube.is_some() || res.patreon.is_some() {
+            if let Some(ref res) = state.result
+                && (res.youtube.is_some() || res.patreon.is_some()) {
                     ui.separator();
                     ui.heading("Generated Copy");
 
@@ -379,7 +379,6 @@ pub fn show(
                             });
                     }
                 }
-            }
         });
 }
 

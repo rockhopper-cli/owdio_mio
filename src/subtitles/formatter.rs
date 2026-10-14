@@ -104,11 +104,10 @@ pub fn format(
             .max(subtitles[i].start + MIN_SUBTITLE_DURATION_SECS);
     }
 
-    if let Some(last) = subtitles.last_mut() {
-        if last.end < last.start + MIN_SUBTITLE_DURATION_SECS {
+    if let Some(last) = subtitles.last_mut()
+        && last.end < last.start + MIN_SUBTITLE_DURATION_SECS {
             last.end = last.start + MIN_SUBTITLE_DURATION_SECS;
         }
-    }
 
     // Re-index sequentially
     for (i, sub) in subtitles.iter_mut().enumerate() {

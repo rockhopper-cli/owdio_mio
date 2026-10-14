@@ -118,7 +118,7 @@ pub fn split_and_convert_audio<P: AsRef<Path>>(
     let mut chunk_paths: Vec<PathBuf> = std::fs::read_dir(temp_dir.path())
         .context("Failed to read chunk temp directory")?
         .filter_map(|entry| entry.ok().map(|e| e.path()))
-        .filter(|p| p.extension().map_or(false, |ext| ext == "wav"))
+        .filter(|p| p.extension().is_some_and(|ext| ext == "wav"))
         .collect();
 
     chunk_paths.sort();

@@ -10,13 +10,18 @@ use crate::audio::transcriber;
 use crate::audio_pipeline::PipelineMessage;
 use crate::subtitles::formatter;
 
+#[derive(Debug, Clone, Copy)]
+pub struct SubtitleOptions {
+    pub chunk_duration_secs: u32,
+    pub max_chars_per_line: usize,
+    pub two_lines: bool,
+    pub min_gap_ms: u64,
+}
+
 pub fn generate_subtitles<P: AsRef<Path>>(
     wav_path: P,
     whisper_endpoint: &str,
-    chunk_duration_secs: u32, // <-- Added chunk size argument
-    max_chars_per_line: usize,
-    two_lines: bool,
-    min_gap_ms: u64,
+    options: SubtitleOptions,
     cancel_token: Arc<AtomicBool>,
     tx: Sender<PipelineMessage<String>>,
 ) -> Result<String> {
@@ -27,8 +32,8 @@ pub fn generate_subtitles<P: AsRef<Path>>(
     let segments = transcriber::transcribe_audio(
         wav_path,
         whisper_endpoint,
-        chunk_duration_secs,
-        max_chars_per_line,
+        options.chunk_duration_secs,
+        options.max_chars_per_line,
         cancel_token.clone(),
         move |progress, text| {
             tx_clone
@@ -55,7 +60,12 @@ pub fn generate_subtitles<P: AsRef<Path>>(
         "Formatting subtitles & adjusting gaps...".into(),
     ));
 
-    let subtitles = formatter::format(&segments, max_chars_per_line, two_lines, min_gap_ms)?;
+    let subtitles = formatter::format(
+        &segments,
+        options.max_chars_per_line,
+        options.two_lines,
+        options.min_gap_ms,
+    )?;
     let srt = formatter::to_srt(&subtitles);
 
     Ok(srt)

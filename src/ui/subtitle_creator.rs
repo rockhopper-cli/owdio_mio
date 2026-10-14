@@ -1,6 +1,7 @@
 // src/ui/subtitle_creator.rs
 use crate::audio_pipeline::PipelineMessage;
 use crate::config_struct::AppConfig;
+use crate::subtitle_pipeline::SubtitleOptions;
 use crate::ui::components;
 use eframe::egui;
 use std::sync::Arc;
@@ -200,45 +201,38 @@ pub fn show(
             }),
         );
 
-        if generate_btn.clicked() {
-            if let Some(wav_path) = state.wav_file_path.clone() {
-                state.is_processing = true;
-                state.progress = 0.05;
-                state.progress_text = "Starting...".to_string();
-                state.cancel_token = Arc::new(AtomicBool::new(false)); // Reset token
-                let _ = log_tx.send(format!(
-                    "--- Starting Subtitle Generation for: {} ---",
-                    wav_path
-                ));
+        if generate_btn.clicked()
+            && let Some(wav_path) = state.wav_file_path.clone()
+        {
+            state.is_processing = true;
+            state.progress = 0.05;
+            state.progress_text = "Starting...".to_string();
+            state.cancel_token = Arc::new(AtomicBool::new(false)); // Reset token
+            let _ = log_tx.send(format!(
+                "--- Starting Subtitle Generation for: {} ---",
+                wav_path
+            ));
 
-                let (tx, rx): (
-                    Sender<PipelineMessage<String>>,
-                    Receiver<PipelineMessage<String>>,
-                ) = channel();
-                state.receiver = Some(rx);
+            let (tx, rx): (
+                Sender<PipelineMessage<String>>,
+                Receiver<PipelineMessage<String>>,
+            ) = channel();
+            state.receiver = Some(rx);
 
-                // Pass value directly as seconds
-                let chunk_duration = state.chunk_duration_secs;
-                let max_chars = state.max_chars_per_line;
-                let two_lines = state.two_lines_subtitles;
-                let min_gap_ms = state.min_gap_ms;
-                let inference_url = format!("http://127.0.0.1:{}/inference", config.whisper_port);
-                let cancel_token = state.cancel_token.clone();
+            let options = SubtitleOptions {
+                chunk_duration_secs: state.chunk_duration_secs,
+                max_chars_per_line: state.max_chars_per_line,
+                two_lines: state.two_lines_subtitles,
+                min_gap_ms: state.min_gap_ms,
+            };
+            let inference_url = format!("http://127.0.0.1:{}/inference", config.whisper_port);
+            let cancel_token = state.cancel_token.clone();
 
-                thread::spawn(move || {
-                    let result = run_pipeline_task(
-                        wav_path,
-                        inference_url,
-                        chunk_duration,
-                        max_chars,
-                        two_lines,
-                        min_gap_ms,
-                        cancel_token,
-                        tx.clone(),
-                    );
-                    let _ = tx.send(PipelineMessage::Finished(result));
-                });
-            }
+            thread::spawn(move || {
+                let result =
+                    run_pipeline_task(wav_path, inference_url, options, cancel_token, tx.clone());
+                let _ = tx.send(PipelineMessage::Finished(result));
+            });
         }
 
         if state.is_processing && ui.button("⏹ Cancel").clicked() {
@@ -261,20 +255,14 @@ pub fn show(
 fn run_pipeline_task(
     wav_path: String,
     inference_url: String,
-    chunk_duration_secs: u32,
-    max_chars: usize,
-    two_lines: bool,
-    min_gap_ms: u64,
+    options: SubtitleOptions,
     cancel_token: Arc<AtomicBool>,
     tx: Sender<PipelineMessage<String>>,
 ) -> Result<String, String> {
     let srt = crate::subtitle_pipeline::generate_subtitles(
         &wav_path,
         &inference_url,
-        chunk_duration_secs,
-        max_chars,
-        two_lines,
-        min_gap_ms,
+        options,
         cancel_token,
         tx,
     )

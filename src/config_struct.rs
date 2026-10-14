@@ -51,21 +51,19 @@ impl AppConfig {
 
     pub fn load() -> Self {
         let path = Self::config_path();
-        if let Ok(contents) = fs::read_to_string(&path) {
-            if let Ok(cfg) = toml::from_str::<AppConfig>(&contents) {
+        if let Ok(contents) = fs::read_to_string(&path)
+            && let Ok(cfg) = toml::from_str::<AppConfig>(&contents) {
                 return cfg;
             }
-        }
 
         // Backward compatibility fallback
         let mut legacy_path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
         legacy_path.push("writehear");
         legacy_path.push("config.toml");
-        if let Ok(contents) = fs::read_to_string(&legacy_path) {
-            if let Ok(cfg) = toml::from_str::<AppConfig>(&contents) {
+        if let Ok(contents) = fs::read_to_string(&legacy_path)
+            && let Ok(cfg) = toml::from_str::<AppConfig>(&contents) {
                 return cfg;
             }
-        }
 
         Self::default()
     }
