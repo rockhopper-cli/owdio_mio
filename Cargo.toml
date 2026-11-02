@@ -1,6 +1,6 @@
 [package]
 name = "owdio_mio"
-version = "0.6.0"
+version = "0.8.0"
 edition = "2024"
 license = "MIT"
 description = "Offline Audio Transcriber (subtitle creation, transcription, summary and content description)"
@@ -45,8 +45,8 @@ debug = false
 anyhow = "1.0.104"
 chrono = "0.4.45"
 dirs = "7.0.0"
-eframe = "0.36.2"
-egui_extras = { version = "*", features = ["all_loaders"] }
+eframe = "0.37"
+egui_extras = { version = "0.37", features = ["all_loaders"] }
 reqwest = { version = "0.13.5", features = ["json", "multipart", "blocking"] }
 rfd = "0.17.2"
 serde = "1.0.229"

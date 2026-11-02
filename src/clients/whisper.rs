@@ -1,10 +1,8 @@
-// src/podman/client.rs
-
-use anyhow::{anyhow, Context, Result};
-use reqwest::blocking::{multipart, Client};
+use super::{DEFAULT_INFERENCE_TIMEOUT_SECS, build_http_client};
+use anyhow::{Context, Result, anyhow};
+use reqwest::blocking::{Client, multipart};
 use serde::Deserialize;
 use std::path::Path;
-use super::{build_http_client, DEFAULT_INFERENCE_TIMEOUT_SECS};
 
 #[derive(Debug, Clone)]
 pub struct WhisperSegment {
@@ -13,7 +11,6 @@ pub struct WhisperSegment {
     pub text: String,
 }
 
-// Structures matching whisper.cpp verbose_json output
 #[derive(Debug, Deserialize)]
 struct WhisperVerboseResponse {
     #[serde(default)]
@@ -40,8 +37,6 @@ impl WhisperClient {
         }
     }
 
-    /// Sends a WAV chunk to whisper.cpp replicating:
-    /// curl http://.../inference -F "file=@..." -F "response_format=verbose_json" -F "max_len=..." -F "split_on_word=true"
     pub fn send_chunk<P: AsRef<Path>>(
         &self,
         chunk_path: P,
@@ -50,23 +45,28 @@ impl WhisperClient {
         let chunk_path = chunk_path.as_ref();
 
         if !chunk_path.exists() {
-            return Err(anyhow!("Chunk file does not exist: {}", chunk_path.display()));
+            return Err(anyhow!(
+                "Chunk file does not exist: {}",
+                chunk_path.display()
+            ));
         }
 
-        // Equivalent to the multipart -F form fields in curl
-        let form = multipart::Form::new()
+        let mut form = multipart::Form::new()
             .file("file", chunk_path)
             .with_context(|| format!("Failed to attach audio file: {}", chunk_path.display()))?
             .text("response_format", "verbose_json")
-            .text("max_len", max_len.to_string())
-            .text("split_on_word", "true");
+            .text("split_on_word", "true"); // Always keep split_on_word active
+
+        if max_len > 0 {
+            form = form.text("max_len", max_len.to_string());
+        }
 
         let response = self
             .client
-            .post(&self.endpoint) // e.g. "http://127.0.0.1:8081/inference"
+            .post(&self.endpoint)
             .multipart(form)
             .send()
-            .context("Failed to connect to whisper.cpp server in Podman")?;
+            .context("Failed to connect to whisper.cpp server. Ensure container is running.")?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -89,8 +89,8 @@ impl WhisperClient {
             .segments
             .into_iter()
             .map(|segment| WhisperSegment {
-                start: segment.start,
-                end: segment.end,
+                start: segment.start.max(0.0),
+                end: segment.end.max(segment.start.max(0.0)),
                 text: segment.text.trim().to_string(),
             })
             .filter(|segment| !segment.text.is_empty())

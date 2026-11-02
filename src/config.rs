@@ -1,4 +1,3 @@
-// src/config_struct.rs
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -13,6 +12,9 @@ pub struct AppConfig {
     /// Chunk duration in seconds: 0 to 300 secs (0 = full file without splitting)
     pub whisper_chunk_duration_secs: u32,
 
+    /// UI Zoom Factor (1.20 default for comfortable reading on PC & Wayland)
+    pub ui_zoom: f32,
+
     pub whisper_port: u16,
     pub manage_whisper_container: bool,
     pub whisper_container_name: String,
@@ -20,6 +22,7 @@ pub struct AppConfig {
     pub qwen_port: u16,
     pub manage_qwen_container: bool,
     pub qwen_container_name: String,
+    pub dark_mode: bool,
 }
 
 impl Default for AppConfig {
@@ -28,7 +31,8 @@ impl Default for AppConfig {
             wav_default_path: dirs::audio_dir().unwrap_or_else(|| PathBuf::from(".")),
             max_chars_per_line: 42,
             subtitle_gap_ms: 100,
-            whisper_chunk_duration_secs: 60, // 60 seconds (1 minute) default
+            whisper_chunk_duration_secs: 60,
+            ui_zoom: 1.20,
 
             whisper_port: 8081,
             manage_whisper_container: false,
@@ -37,6 +41,7 @@ impl Default for AppConfig {
             qwen_port: 8080,
             manage_qwen_container: false,
             qwen_container_name: "qwen-coder".to_string(),
+            dark_mode: true,
         }
     }
 }

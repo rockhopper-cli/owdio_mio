@@ -1,7 +1,5 @@
-// src/ui/setup_model.rs
 use eframe::egui;
 
-/// Helper to render a copyable monospace command box
 fn command_box(ui: &mut egui::Ui, code: &str) {
     egui::Frame::group(ui.style())
         .fill(ui.visuals().code_bg_color)
@@ -10,7 +8,7 @@ fn command_box(ui: &mut egui::Ui, code: &str) {
             ui.horizontal(|ui| {
                 ui.add(
                     egui::Label::new(egui::RichText::new(code).monospace())
-                        .wrap()
+                        .wrap_mode(egui::TextWrapMode::Wrap),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("📋 Copy").clicked() {
@@ -28,57 +26,36 @@ pub fn show(ui: &mut egui::Ui) {
         ui.add_space(10.0);
 
         // --- Step 1 ---
-        ui.label(egui::RichText::new("1. NVIDIA Container Toolkit (openSUSE)").strong());
-        ui.label(
-            "If you have a relatively new NVIDIA graphics card that works with the G07 version \
-            of the openSUSE NVIDIA drivers, install and setup the container toolkit:"
-        );
+        ui.label(egui::RichText::new("1. NVIDIA Container Toolkit").strong());
+        ui.label("Ensure NVIDIA Container CDI support is installed and configured:");
         ui.add_space(4.0);
-        command_box(ui, "sudo zypper in nvidia-container-toolkit");
-
-        ui.add_space(4.0);
-        command_box(ui, "sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml");
-
+        command_box(ui, "sudo zypper in nvidia-container-toolkit\nsudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml");
 
         // --- Step 2 ---
         ui.label(egui::RichText::new("2. Model Directory").strong());
-        ui.label("Create a dedicated folders for your llm and whisper models:");
+        ui.label("Create dedicated folders for local models:");
         ui.add_space(4.0);
         command_box(ui, "mkdir -p ~/podman_containers/ai_models/llm ~/podman_containers/ai_models/whisper");
 
         // --- Step 3 ---
-        ui.label(egui::RichText::new("3. Download Model").strong());
-        ui.label(
-            "Move to the directory and download the relevant model. The one below is \
-            Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf (optimized for cards with <8GB VRAM):"
-        );
+        ui.label(egui::RichText::new("3. Download Models").strong());
+        ui.label("Download Qwen 2.5 Coder 7B (Instruct Q4_K_M):");
         ui.add_space(4.0);
         command_box(
             ui,
             "cd ~/podman_containers/ai_models/llm\ncurl -L -O \"https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf\"",
         );
 
-        ui.label("Standardize filename:");
-        ui.add_space(4.0);
-        command_box(ui, "mv qwen2.5-coder-7b-instruct-q4_k_m.gguf Qwen2.5-Coder-7B-Instruct-Q4_K_M.ggufr");
-
-        ui.label(
-            "Move to the directory and download the relevant model. The one below is \
-            large-v3-turbo-q5_0 (optimized for cards with <8GB VRAM):"
-        );
+        ui.label("Download Whisper Large v3 Turbo (Q5_0):");
         ui.add_space(4.0);
         command_box(
             ui,
             "cd ~/podman_containers/ai_models/whisper\ncurl -L -O \"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin\"",
         );
 
-
         // --- Step 4 ---
-        ui.label(egui::RichText::new("4. Run LLM Server").strong());
-        ui.label(
-            "qwen2.5-coder-7b-instruct is the llm designed for capable of summarizing transcripts and extracting meeting notes.\n\
-            Run the container on port 8080:"
-        );
+        ui.label(egui::RichText::new("4. Run LLM Server (Qwen 2.5)").strong());
+        ui.label("Runs llama.cpp with a 16k context window (-c 16384) to handle long transcripts:");
         ui.add_space(4.0);
 
         let podman_llmcmd = r#"podman run -d \
@@ -91,18 +68,14 @@ pub fn show(ui: &mut egui::Ui) {
   -m /models/qwen2.5-coder-7b-instruct-q4_k_m.gguf \
   --host 0.0.0.0 \
   --port 8080 \
-  -ngl 24 \
-  -c 4096"#;
+  -ngl 28 \
+  -c 16384"#;
 
         command_box(ui, podman_llmcmd);
 
-
         // --- Step 5 ---
-        ui.label(egui::RichText::new("5. Run Speech-to-Text Server").strong());
-        ui.label(
-            "whisper.cpp ships with a web server (whisper-server) designed for transcription endpoints.\n\
-            Run the container on port 8081:"
-        );
+        ui.label(egui::RichText::new("5. Run Speech-to-Text Server (Whisper)").strong());
+        ui.label("Runs whisper.cpp on port 8081:");
         ui.add_space(4.0);
 
         let podman_cmd = r#"podman run -d \

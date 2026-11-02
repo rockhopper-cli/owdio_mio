@@ -1,5 +1,6 @@
 // src/ui/mod.rs
 pub mod about;
+pub mod async_job;
 pub mod components;
 pub mod config;
 pub mod content_creator;

@@ -1,6 +1,6 @@
 // src/audio/transcriber.rs
 use crate::audio::ffmpeg;
-use crate::podman::client::{WhisperClient, WhisperSegment};
+use crate::clients::whisper::{WhisperClient, WhisperSegment};
 use anyhow::{Context, Result, anyhow};
 use std::path::Path;
 use std::sync::Arc;

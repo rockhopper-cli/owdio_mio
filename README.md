@@ -149,36 +149,43 @@ owdio_mio/
 │   ├── logo.png                              # App branding & UI logo
 │   └── owdio_mio.desktop                     # Linux desktop launcher entry
 ├── src/
-│   ├── main.rs                               # Application entrypoint & font/image loader setup
-│   ├── app.rs                                # Central egui state, tab navigation & log drawer
+│   ├── main.rs                               # Entrypoint, Wayland app_id & native scaling setup
+│   ├── app.rs                                # egui state, tab navigation, log drawer & container cleanup
+│   ├── config.rs                             # Configuration data models, UI zoom & state persistence
+│   ├── utils.rs                              # Timestamp & log formatting helpers
 │   ├── audio/
-│   │   ├── ffmpeg.rs                         # FFmpeg audio conversion & segmentation
+│   │   ├── ffmpeg.rs                         # FFmpeg audio conversion & multi-chunk segmentation
 │   │   ├── mod.rs
 │   │   └── transcriber.rs                    # Multi-chunk transcription dispatcher
-│   ├── audio_pipeline.rs                     # End-to-end transcription & summary pipeline
-│   ├── config_struct.rs                      # Configuration data models & state persistence
-│   ├── podman/
-│   │   ├── client.rs                         # Whisper HTTP client & verbose_json parser
-│   │   ├── llm_client.rs                     # Qwen/llama.cpp OpenAI-compatible chat client
-│   │   ├── manager.rs                        # Container lifecycle & process manager (start/stop/status)
-│   │   └── mod.rs                            # Shared HTTP client setup & timeouts
-│   ├── subtitle_pipeline.rs                  # Standalone subtitle generation pipeline
-│   ├── subtitles/
-│   │   ├── formatter.rs                      # Word-wrapping, gap enforcement & SRT serializer
-│   │   └── mod.rs
-│   ├── ui/
-│   │   ├── about.rs                          # About view, version information & credits
-│   │   ├── components.rs                     # Reusable UI widgets (file picker, progress bar)
-│   │   ├── config.rs                         # Settings panel, container controls & health checks
-│   │   ├── content_creator.rs                # YouTube description & Patreon post generator
+│   ├── clients/
+│   │   ├── llm.rs                            # Qwen OpenAI-compatible chat client & AI spellchecker
+│   │   ├── mod.rs                            # Shared HTTP client setup & timeout controls
+│   │   └── whisper.rs                        # Whisper HTTP client & verbose_json parser
+│   ├── container/
 │   │   ├── mod.rs
-│   │   ├── setup_model.rs                    # Container setup instructions & copyable commands
-│   │   ├── subtitle_creator.rs               # Subtitle generator tab
-│   │   └── transcription.rs                  # Audio transcription & executive summary tab
-│   └── utils.rs                              # Timestamp & log formatting helpers
+│   │   └── podman.rs                         # Podman lifecycle manager (start/stop/sync-drop & health checks)
+│   ├── pipelines/
+│   │   ├── content.rs                        # YouTube chapters & Patreon generation pipeline
+│   │   ├── mod.rs                            # Shared pipeline messaging & async event types
+│   │   ├── subtitles.rs                      # Subtitle generation & gap alignment pipeline
+│   │   └── transcription.rs                  # Audio transcription, AI proofreading & executive summary pipeline
+│   ├── subtitles/
+│   │   ├── formatter.rs                      # Word-wrapping, gap enforcement & collision-free SRT serializer
+│   │   ├── mod.rs
+│   │   └── parser.rs                         # SRT/VTT parser for LLM transcript ingestion
+│   └── ui/
+│       ├── about.rs                          # About view, version information & build metadata
+│       ├── async_job.rs                      # Cancellation-token-aware background thread worker
+│       ├── components.rs                     # Reusable UI widgets (media picker, animated progress bar)
+│       ├── config.rs                         # Settings panel, UI zoom slider & container controls
+│       ├── content_creator.rs                # YouTube description & Patreon post generator tab
+│       ├── mod.rs
+│       ├── setup_model.rs                    # Copyable GPU container setup commands for Podman
+│       ├── subtitle_creator.rs               # Standalone subtitle generator tab
+│       └── transcription.rs                  # Transcription, AI spellcheck & executive summary tab
 ├── Cargo.lock
 ├── Cargo.toml
-└── README.md                                 # Project overview, requirements & setup guide
+└── README.md
 ```
 
 ---

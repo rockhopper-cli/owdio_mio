@@ -1,5 +1,5 @@
-// src/podman/manager.rs
-use crate::config_struct::AppConfig;
+use crate::clients::build_http_client;
+use crate::config::AppConfig;
 use std::process::Command;
 use std::sync::mpsc::Sender;
 use std::thread;
@@ -8,16 +8,14 @@ use std::time::Duration;
 pub fn start_container(container_name: &str, log_tx: Option<Sender<String>>) {
     let name = container_name.to_string();
     thread::spawn(move || {
-        let msg = format!("[Podman] Starting container: {}", name);
         if let Some(ref tx) = log_tx {
-            let _ = tx.send(msg);
+            let _ = tx.send(format!("[Podman] Starting container: {}", name));
         }
 
         match Command::new("podman").args(["start", &name]).output() {
             Ok(output) if output.status.success() => {
-                let msg = format!("[Podman] Container '{}' started.", name);
                 if let Some(ref tx) = log_tx {
-                    let _ = tx.send(msg);
+                    let _ = tx.send(format!("[Podman] Container '{}' started.", name));
                 }
             }
             Ok(output) => {
@@ -31,52 +29,29 @@ pub fn start_container(container_name: &str, log_tx: Option<Sender<String>>) {
                 }
             }
             Err(e) => {
-                let err_msg = format!("[Podman] Failed to invoke podman CLI: {}", e);
                 if let Some(ref tx) = log_tx {
-                    let _ = tx.send(err_msg);
+                    let _ = tx.send(format!("[Podman] Failed to invoke podman CLI: {}", e));
                 }
             }
         }
     });
 }
 
-// In src/podman/manager.rs
 pub fn stop_container(container_name: &str, log_tx: Option<Sender<String>>) {
     let name = container_name.to_string();
     thread::spawn(move || {
-        let msg = format!("[Podman] Stopping container: {}", name);
+        stop_container_sync(&name);
         if let Some(ref tx) = log_tx {
-            let _ = tx.send(msg);
-        }
-
-        match Command::new("podman")
-            .args(["stop", "-t", "3", &name])
-            .output()
-        {
-            Ok(output) if output.status.success() => {
-                let msg = format!("[Podman] Container '{}' stopped.", name);
-                if let Some(ref tx) = log_tx {
-                    let _ = tx.send(msg);
-                }
-            }
-            Ok(output) => {
-                let err_msg = format!(
-                    "[Podman] Error stopping container '{}': {}",
-                    name,
-                    String::from_utf8_lossy(&output.stderr).trim()
-                );
-                if let Some(ref tx) = log_tx {
-                    let _ = tx.send(err_msg);
-                }
-            }
-            Err(e) => {
-                let err_msg = format!("[Podman] Failed to invoke podman CLI: {}", e);
-                if let Some(ref tx) = log_tx {
-                    let _ = tx.send(err_msg);
-                }
-            }
+            let _ = tx.send(format!("[Podman] Container '{}' stopped.", name));
         }
     });
+}
+
+/// Synchronous stop with a fast timeout (3s) to safely run inside Drop before process exit.
+pub fn stop_container_sync(container_name: &str) {
+    let _ = Command::new("podman")
+        .args(["stop", "-t", "3", container_name])
+        .output();
 }
 
 pub fn get_container_status(container_name: &str) -> Option<String> {
@@ -147,9 +122,9 @@ pub fn check_services(config: &AppConfig, log_tx: Sender<String>, delay_ms: u64)
             let _ = log_tx.send("[Health Check] [Warning] Podman CLI not detected on PATH.".into());
         }
 
-        let client = super::build_http_client(2);
+        let client = build_http_client(2);
 
-        // 3. Whisper
+        // 3. Whisper STT
         match check_service_endpoint(
             &client,
             cfg.whisper_port,
@@ -186,7 +161,7 @@ pub fn check_services(config: &AppConfig, log_tx: Sender<String>, delay_ms: u64)
             }
         }
 
-        // 4. Qwen
+        // 4. Qwen LLM
         match check_service_endpoint(
             &client,
             cfg.qwen_port,
@@ -207,7 +182,7 @@ pub fn check_services(config: &AppConfig, log_tx: Sender<String>, delay_ms: u64)
             }
             ServiceStatus::Offline { .. } => {
                 let _ = log_tx.send(format!(
-                    "[Health Check] Qwen LLM endpoint OFFLINE on port {}. (Optional for summaries).",
+                    "[Health Check] Qwen LLM endpoint OFFLINE on port {}. (Optional for summaries/spellcheck).",
                     cfg.qwen_port
                 ));
             }
